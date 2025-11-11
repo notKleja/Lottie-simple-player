@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Lottie Preview</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
+<style>
+  body { margin: 0; padding: 20px; font-family: sans-serif; }
+  #controls { margin-bottom: 20px; display:flex; gap:12px; align-items:center; }
+  #grid {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .cell {
+    position: relative;
+    width: 100%;
+    padding-top: 100%;
+  }
+  .anim {
+    position: absolute;
+    inset: 0;
+  }
+</style>
+</head>
+<body>
+<div id="controls">
+  <input id="uploader" type="file" accept=".json" multiple />
+  <input id="bg" type="color" />
+  <input id="cols" type="number" value="4" min="1" max="20" />
+</div>
+
+<div id="grid"></div>
+
+<script>
+  document.getElementById('bg').addEventListener('input', e => {
+    document.body.style.background = e.target.value;
+  });
+
+  document.getElementById('cols').addEventListener('input', e => {
+    const n = parseInt(e.target.value, 10);
+    if (n > 0) {
+      document.getElementById('grid').style.gridTemplateColumns = `repeat(${n}, 1fr)`;
+    }
+  });
+
+  document.getElementById('uploader').addEventListener('change', e => {
+    const files = Array.from(e.target.files);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = evt => {
+        try {
+          const data = JSON.parse(evt.target.result);
+          addLottie(data);
+        } catch {}
+      };
+      reader.readAsText(file);
+    });
+  });
+
+  function addLottie(jsonData) {
+    const grid = document.getElementById('grid');
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    const container = document.createElement('div');
+    container.className = 'anim';
+    cell.appendChild(container);
+    grid.appendChild(cell);
+
+    lottie.loadAnimation({
+      container,
+      renderer: 'svg',
+      loop: true,
+      autoplay: true,
+      animationData: jsonData
+    });
+  }
+</script>
+</body>
+</html>
