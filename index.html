@@ -46,17 +46,20 @@
 
   document.getElementById('uploader').addEventListener('change', e => {
     const files = Array.from(e.target.files);
-    files.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = evt => {
-        try {
-          const data = JSON.parse(evt.target.result);
-          addLottie(data);
-        } catch {}
-      };
-      reader.readAsText(file);
-    });
+    files.forEach(handleFile);
   });
+
+  // --- unified loader ---
+  function handleFile(file) {
+    const reader = new FileReader();
+    reader.onload = evt => {
+      try {
+        const data = JSON.parse(evt.target.result);
+        addLottie(data);
+      } catch {}
+    };
+    reader.readAsText(file);
+  }
 
   function addLottie(jsonData) {
     const grid = document.getElementById('grid');
@@ -75,6 +78,19 @@
       animationData: jsonData
     });
   }
+
+  // --- drag & drop support ---
+  document.body.addEventListener('dragover', e => {
+    e.preventDefault();
+  });
+
+  document.body.addEventListener('drop', e => {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files)
+      .filter(f => f.name.toLowerCase().endsWith('.json'));
+    files.forEach(handleFile);
+  });
 </script>
+
 </body>
 </html>
