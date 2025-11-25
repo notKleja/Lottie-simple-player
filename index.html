@@ -1,96 +1,457 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8" />
-<title>Lottie Preview</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
-<style>
-  body { margin: 0; padding: 20px; font-family: sans-serif; }
-  #controls { margin-bottom: 20px; display:flex; gap:12px; align-items:center; }
-  #grid {
-    display: grid;
-    gap: 16px;
-    grid-template-columns: repeat(4, 1fr);
-  }
-  .cell {
-    position: relative;
-    width: 100%;
-    padding-top: 100%;
-  }
-  .anim {
-    position: absolute;
-    inset: 0;
-  }
-</style>
-</head>
-<body>
-<div id="controls">
-  <input id="uploader" type="file" accept=".json" multiple />
-  <input id="bg" type="color" />
-  <input id="cols" type="number" value="4" min="1" max="20" />
-</div>
-
-<div id="grid"></div>
-
-<script>
-  document.getElementById('bg').addEventListener('input', e => {
-    document.body.style.background = e.target.value;
-  });
-
-  document.getElementById('cols').addEventListener('input', e => {
-    const n = parseInt(e.target.value, 10);
-    if (n > 0) {
-      document.getElementById('grid').style.gridTemplateColumns = `repeat(${n}, 1fr)`;
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lottie Preview</title>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
+  
+  <style>
+    /* --- 1. Dark Theme Variables Only --- */
+    :root {
+      --bg-body: #000000;
+      --bg-header: rgba(28, 28, 30, 0.85);
+      --text-primary: #F5F5F7;
+      --text-secondary: #A1A1A6;
+      --border-color: rgba(255, 255, 255, 0.15);
+      
+      --accent: #0A84FF; /* iOS Dark Mode Blue */
+      --accent-hover: #0077ED;
+      
+      --drop-overlay: rgba(10, 132, 255, 0.3);
+      --btn-bg: rgba(255, 255, 255, 0.15);
+      --btn-bg-hover: rgba(255, 255, 255, 0.25);
+      
+      --popover-bg: #1C1C1E;
+      --popover-border: rgba(255,255,255,0.1);
+      --popover-shadow: 0 20px 50px rgba(0,0,0,0.6);
     }
-  });
 
-  document.getElementById('uploader').addEventListener('change', e => {
-    const files = Array.from(e.target.files);
-    files.forEach(handleFile);
-  });
+    /* --- 2. Global Resets --- */
+    html { scrollbar-gutter: stable; }
+    body {
+      margin: 0; padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-body);
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+      transition: background-color 0.3s ease;
+    }
 
-  // --- unified loader ---
-  function handleFile(file) {
-    const reader = new FileReader();
-    reader.onload = evt => {
-      try {
-        const data = JSON.parse(evt.target.result);
-        addLottie(data);
-      } catch {}
-    };
-    reader.readAsText(file);
-  }
+    /* --- Header --- */
+    header {
+      position: sticky; top: 0; z-index: 100;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 16px 40px;
+      background: var(--bg-header);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border-color);
+    }
 
-  function addLottie(jsonData) {
+    .brand { font-weight: 600; font-size: 1.1rem; letter-spacing: -0.01em; }
+    .controls { display: flex; gap: 16px; align-items: center; }
+
+    .btn-secondary {
+      background: var(--btn-bg); color: var(--text-primary); padding: 8px 12px;
+      border-radius: 8px; font-size: 0.85rem; font-weight: 500; cursor: pointer;
+      border: none; transition: background 0.2s; display: flex; align-items: center; gap: 8px;
+    }
+    .btn-upload {
+      color: white; background: var(--accent);
+      padding: 8px 18px; border-radius: 999px; font-size: 0.9rem; font-weight: 600;
+      cursor: pointer; transition: all 0.2s ease; display: inline-flex; align-items: center;
+      border: none;
+    }
+    .btn-upload:hover { transform: scale(1.02); background: var(--accent-hover); }
+    #uploader { display: none; }
+
+    /* --- Color Picker Component --- */
+    .color-picker-container {
+      position: relative;
+    }
+
+    /* Trigger Bar */
+    .color-trigger {
+      display: flex; align-items: center; gap: 10px;
+      padding: 6px 12px 6px 6px; 
+      background: var(--btn-bg);
+      border-radius: 99px;
+      transition: background 0.2s;
+      border: 1px solid transparent;
+    }
+    .color-trigger:hover { background: var(--btn-bg-hover); }
+
+    /* Swatch (Clickable -> Opens Popover) */
+    .current-swatch {
+      width: 24px; height: 24px; border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.2);
+      cursor: pointer;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      transition: transform 0.1s;
+    }
+    .current-swatch:active { transform: scale(0.9); }
+
+    /* Hex Input (Editable -> No Popover) */
+    .hex-input {
+      background: transparent;
+      border: none;
+      outline: none;
+      font-family: monospace; 
+      font-size: 0.9rem;
+      color: var(--text-primary);
+      width: 70px;
+      text-transform: uppercase;
+      padding: 0; margin: 0;
+      cursor: text;
+    }
+
+    /* --- Popover (History) --- */
+    .picker-popover {
+      position: absolute;
+      top: calc(100% + 12px);
+      left: 50%;
+      transform: translateX(-50%) scale(0.95);
+      width: 240px;
+      background: var(--popover-bg);
+      backdrop-filter: blur(40px);
+      -webkit-backdrop-filter: blur(40px);
+      border-radius: 16px;
+      box-shadow: var(--popover-shadow);
+      padding: 16px;
+      z-index: 200;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      border: 1px solid var(--popover-border);
+    }
+    .picker-popover.open { opacity: 1; pointer-events: auto; transform: translateX(-50%) scale(1); }
+
+    .popover-header {
+      font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--text-secondary); margin-bottom: 12px; font-weight: 600;
+    }
+
+    /* History Grid */
+    .history-grid {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 16px;
+    }
+    .history-swatch {
+      width: 100%; aspect-ratio: 1; border-radius: 50%; cursor: pointer;
+      border: 1px solid rgba(255,255,255,0.1); position: relative;
+    }
+    .history-swatch:hover { transform: scale(1.15); border-color: white; }
+    .history-swatch.active { border: 2px solid var(--accent); }
+
+    /* Custom Picker Button in Popover */
+    .native-trigger-btn {
+      position: relative;
+      width: 100%; padding: 10px;
+      background: rgba(255,255,255,0.1);
+      color: var(--text-primary);
+      border-radius: 8px;
+      font-size: 0.85rem; font-weight: 500;
+      cursor: pointer; text-align: center;
+      transition: background 0.2s;
+    }
+    .native-trigger-btn:hover { background: rgba(255,255,255,0.2); }
+    
+    /* Hidden Native Picker */
+    #native-color-input {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      opacity: 0; cursor: pointer;
+    }
+
+    /* --- Other Inputs --- */
+    input[type="number"] {
+      width: 44px; padding: 6px;
+      border: 1px solid var(--border-color); border-radius: 8px;
+      font-family: inherit; color: var(--text-primary); text-align: center;
+      background: transparent; outline: none;
+    }
+    input[type="number"]:focus { border-color: var(--accent); }
+
+    /* --- Main --- */
+    main { flex: 1; padding: 40px; max-width: 1600px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+    #grid { display: grid; gap: 40px; grid-template-columns: repeat(4, 1fr); }
+    .card { background: transparent; display: flex; flex-direction: column; align-items: center; }
+    .cell { position: relative; width: 100%; padding-top: 100%; }
+    .anim { position: absolute; inset: 0; display: flex; justify-content: center; align-items: center; }
+    .meta { margin-top: 12px; font-size: 0.85rem; color: var(--text-secondary); font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 100%; }
+    
+    #empty-state { text-align: center; margin-top: 10vh; color: var(--text-secondary); }
+    #empty-state.hidden { display: none; }
+    #empty-state h2 { font-size: 1.5rem; color: var(--text-primary); margin-bottom: 8px; }
+
+    #drag-overlay {
+      position: fixed; inset: 0; background: var(--drop-overlay); backdrop-filter: blur(8px);
+      z-index: 999; display: flex; justify-content: center; align-items: center;
+      pointer-events: none; opacity: 0; transition: opacity 0.2s ease;
+    }
+    #drag-overlay.active { opacity: 1; }
+    #drag-overlay span {
+      font-size: 2rem; font-weight: 600; color: white; background: #000;
+      padding: 20px 40px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+
+    @media (max-width: 1200px) { #grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 900px) { #grid { grid-template-columns: repeat(2, 1fr); } header { padding: 16px 20px; } }
+    @media (max-width: 600px) { #grid { grid-template-columns: 1fr; } .controls { flex-wrap: wrap; justify-content: center; } }
+  </style>
+</head>
+
+<body>
+
+  <div id="drag-overlay"><span>Drop JSON Files</span></div>
+
+  <header>
+    <div class="brand">Lottie Preview</div>
+
+    <div class="controls">
+      
+      <div class="color-picker-container" id="picker-container">
+        <div class="color-trigger">
+          <div class="current-swatch" id="color-swatch" title="Open Color History"></div>
+          <input type="text" id="hex-input" class="hex-input" value="#000000" spellcheck="false" maxlength="7">
+        </div>
+
+        <div class="picker-popover" id="color-popover">
+          <div class="popover-header">History</div>
+          <div class="history-grid" id="history-grid"></div>
+          
+          <div class="native-trigger-btn">
+            🌈 Custom Color
+            <input type="color" id="native-color-input">
+          </div>
+        </div>
+      </div>
+
+      <input id="cols" type="number" value="4" min="1" max="10" title="Columns"/>
+
+      <label for="uploader" class="btn-upload"> + Add </label>
+      <input id="uploader" type="file" accept=".json" multiple />
+    </div>
+  </header>
+
+  <main>
+    <div id="empty-state">
+      <h2>No animations yet</h2>
+      <p>Drag & drop .json files here</p>
+    </div>
+    <div id="grid"></div>
+  </main>
+
+  <script>
+    // --- Global DOM ---
     const grid = document.getElementById('grid');
-    const cell = document.createElement('div');
-    cell.className = 'cell';
-    const container = document.createElement('div');
-    container.className = 'anim';
-    cell.appendChild(container);
-    grid.appendChild(cell);
+    const emptyState = document.getElementById('empty-state');
+    const dragOverlay = document.getElementById('drag-overlay');
+    
+    // Color Picker DOM
+    const container = document.getElementById('picker-container');
+    const swatch = document.getElementById('color-swatch');
+    const hexInput = document.getElementById('hex-input');
+    const popover = document.getElementById('color-popover');
+    const historyGrid = document.getElementById('history-grid');
+    const nativeInput = document.getElementById('native-color-input');
 
-    lottie.loadAnimation({
-      container,
-      renderer: 'svg',
-      loop: true,
-      autoplay: true,
-      animationData: jsonData
+    // --- State ---
+    const state = {
+      currentColor: '#000000',
+      history: ['#000000', '#1C1C1E', '#FFFFFF', '#FF3B30', '#30D158', '#0A84FF', '#5E5CE6', '#FF9F0A'],
+      isPopoverOpen: false
+    };
+
+    // --- Initialization ---
+    function init() {
+      // Set initial color from CSS or default
+      const computed = getComputedStyle(document.body).backgroundColor;
+      state.currentColor = rgbToHex(computed);
+      
+      updateUI();
+      renderHistory();
+      
+      // Events
+      swatch.addEventListener('click', togglePopover);
+      
+      // Hex Input Logic
+      hexInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          validateAndApply(e.target.value);
+          hexInput.blur();
+        }
+      });
+      hexInput.addEventListener('blur', (e) => validateAndApply(e.target.value));
+      hexInput.addEventListener('focus', (e) => {
+        // Close popover if focusing on text to avoid clutter
+        if(state.isPopoverOpen) togglePopover();
+        e.target.select();
+      });
+
+      // Native Picker Logic
+      nativeInput.addEventListener('input', (e) => applyColor(e.target.value, false));
+      nativeInput.addEventListener('change', (e) => {
+        applyColor(e.target.value, true); // save to history on commit
+        // Optional: Close popover on selection
+        // togglePopover();
+      });
+
+      // Close popover when clicking outside
+      document.addEventListener('click', (e) => {
+        if (state.isPopoverOpen && !container.contains(e.target)) {
+          togglePopover();
+        }
+      });
+    }
+
+    // --- Logic ---
+    function togglePopover() {
+      state.isPopoverOpen = !state.isPopoverOpen;
+      if (state.isPopoverOpen) popover.classList.add('open');
+      else popover.classList.remove('open');
+    }
+
+    function validateAndApply(input) {
+      // 1. Clean input
+      let clean = input.trim().replace(/^#/, '');
+
+      // 2. Regex Check: Must be exactly 3 or 6 Hex characters
+      // ^ start, [0-9A-F] range, {3} or {6} count, $ end, i case-insensitive
+      const isValid = /^([0-9A-F]{3}|[0-9A-F]{6})$/i.test(clean);
+
+      if (isValid) {
+        // Expand 3-digit to 6-digit
+        if (clean.length === 3) {
+          clean = clean.split('').map(c => c + c).join('');
+        }
+        const fullHex = '#' + clean.toUpperCase();
+        
+        applyColor(fullHex, true); // valid -> apply & save
+      } else {
+        // Invalid -> Revert UI to last valid state
+        hexInput.value = state.currentColor;
+      }
+    }
+
+    function applyColor(hex, saveToHistory = false) {
+      state.currentColor = hex.toUpperCase();
+      
+      // Update DOM
+      document.body.style.backgroundColor = state.currentColor;
+      updateUI();
+
+      if (saveToHistory) {
+        addToHistory(state.currentColor);
+      }
+    }
+
+    function updateUI() {
+      swatch.style.backgroundColor = state.currentColor;
+      // Only update input if not focused (to allow typing)
+      if (document.activeElement !== hexInput) {
+        hexInput.value = state.currentColor;
+      }
+      // Render history to update 'active' border
+      renderHistory();
+    }
+
+    function addToHistory(hex) {
+      // Remove if exists
+      const idx = state.history.indexOf(hex);
+      if (idx > -1) state.history.splice(idx, 1);
+      
+      // Add to front
+      state.history.unshift(hex);
+      
+      // Cap at 10
+      if (state.history.length > 10) state.history.pop();
+      
+      renderHistory();
+    }
+
+    function renderHistory() {
+      historyGrid.innerHTML = '';
+      state.history.forEach(color => {
+        const el = document.createElement('div');
+        el.className = `history-swatch ${color === state.currentColor ? 'active' : ''}`;
+        el.style.backgroundColor = color;
+        el.onclick = () => applyColor(color, false); // clicking history sets color
+        historyGrid.appendChild(el);
+      });
+    }
+
+    // Helper
+    function rgbToHex(rgb) {
+      if(!rgb || rgb.startsWith('#')) return rgb || '#000000';
+      const sep = rgb.indexOf(",") > -1 ? "," : " ";
+      const parts = rgb.substr(4).split(")")[0].split(sep);
+      const r = (+parts[0]).toString(16).padStart(2, '0');
+      const g = (+parts[1]).toString(16).padStart(2, '0');
+      const b = (+parts[2]).toString(16).padStart(2, '0');
+      return "#" + r + g + b;
+    }
+
+    // --- App Core (Upload/Grid) ---
+    document.getElementById('cols').addEventListener('input', e => {
+      const n = parseInt(e.target.value, 10);
+      if (n > 0) grid.style.gridTemplateColumns = `repeat(${n}, 1fr)`;
     });
-  }
 
-  // --- drag & drop support ---
-  document.body.addEventListener('dragover', e => {
-    e.preventDefault();
-  });
+    document.getElementById('uploader').addEventListener('change', e => {
+      Array.from(e.target.files).forEach(handleFile);
+      e.target.value = '';
+    });
 
-  document.body.addEventListener('drop', e => {
-    e.preventDefault();
-    const files = Array.from(e.dataTransfer.files)
-      .filter(f => f.name.toLowerCase().endsWith('.json'));
-    files.forEach(handleFile);
-  });
-</script>
+    function handleFile(file) {
+      emptyState.classList.add('hidden');
+      const reader = new FileReader();
+      reader.onload = evt => {
+        try {
+          renderCard(JSON.parse(evt.target.result), file.name);
+        } catch (err) { console.error(err); }
+      };
+      reader.readAsText(file);
+    }
 
+    function renderCard(animationData, filename) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const animContainer = document.createElement('div');
+      animContainer.className = 'anim';
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = filename.replace('.json', '');
+      
+      cell.appendChild(animContainer);
+      card.appendChild(cell);
+      card.appendChild(meta);
+      grid.appendChild(card);
+
+      lottie.loadAnimation({
+        container: animContainer, renderer: 'svg', loop: true, autoplay: true, animationData: animationData
+      });
+    }
+
+    // Drag & Drop
+    let dragCounter = 0;
+    window.addEventListener('dragenter', e => { e.preventDefault(); dragCounter++; dragOverlay.classList.add('active'); });
+    window.addEventListener('dragleave', e => { e.preventDefault(); dragCounter--; if(dragCounter===0) dragOverlay.classList.remove('active'); });
+    window.addEventListener('dragover', e => { e.preventDefault(); });
+    window.addEventListener('drop', e => {
+      e.preventDefault(); dragCounter = 0; dragOverlay.classList.remove('active');
+      const files = Array.from(e.dataTransfer.files || []).filter(f => f.name.toLowerCase().endsWith('.json'));
+      if (files.length) files.forEach(handleFile);
+    });
+
+    // Start
+    init();
+
+  </script>
 </body>
 </html>
